@@ -31,7 +31,7 @@ function ParallaxRow({
   speed = 0.12,
   bgClass = "bg-stone-200",
 }: {
-  items: string[];
+  items: readonly string[] | string[];
   reverse?: boolean;
   speed?: number;
   bgClass?: string;
@@ -230,13 +230,13 @@ export default function PartnershipPage({ params }: PageProps) {
           <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
             <div className="my-8 space-y-3 overflow-hidden">
               <ParallaxRow
-                items={cat.marqueeItems}
+                items={[...cat.marqueeItems]}
                 reverse={idx % 2 === 1}
                 speed={0.1}
                 bgClass={cat.bgClass}
               />
               <ParallaxRow
-                items={cat.marqueeItems}
+                items={[...cat.marqueeItems]}
                 reverse={idx % 2 === 0}
                 speed={0.1}
                 bgClass={cat.bgClass}

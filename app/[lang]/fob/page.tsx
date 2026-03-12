@@ -1,8 +1,54 @@
 "use client";
 
-import PalletSimulator, { type SimulatorStats } from "@/components/PalletSimulator";
+import { type SimulatorStats } from "@/components/PalletSimulator";
+import dynamic from "next/dynamic";
 import { useParams } from "next/navigation";
 import { useCallback, useState } from "react";
+import { useTranslations } from "next-intl";
+
+function localizeShelfLife(
+  val: string | undefined,
+  t: ReturnType<typeof useTranslations<"fob">>
+): string {
+  if (!val) return "—";
+  return val
+    .replace("제조일로부터 ", t("shelf_from_mfg") + " ")
+    .replace(/(\d+)개월/g, (_, n) => `${n} ${t("shelf_months")}`);
+}
+
+function localizeStorage(
+  val: string | undefined,
+  t: ReturnType<typeof useTranslations<"fob">>
+): string {
+  if (!val) return "—";
+  return val
+    .replace("상온 보관 / 개봉 후 냉장", t("storage_room_open_cold"))
+    .replace("냉장 보관 (0–10°C)", t("storage_cold"))
+    .replace("냉동 보관 (-18°C 이하)", t("storage_frozen"))
+    .replace("냉동 보관 (-18°C)", t("storage_frozen"));
+}
+
+function localizeCartonsPallet(
+  val: string | undefined,
+  t: ReturnType<typeof useTranslations<"fob">>
+): string {
+  if (!val) return "—";
+  return val.replace("박스", t("unit_box"));
+}
+
+function PalletSimulatorLoading() {
+  const t = useTranslations("fob");
+  return (
+    <div className="flex h-[400px] items-center justify-center text-sm text-stone-400">
+      {t("sim_loading")}
+    </div>
+  );
+}
+
+const PalletSimulator = dynamic(() => import("@/components/PalletSimulator"), {
+  ssr: false,
+  loading: () => <PalletSimulatorLoading />,
+});
 
 type FobProduct = {
   kor: string;
@@ -363,7 +409,7 @@ const frozenProducts: FobProduct[] = [
     manufacturer: "SLUNCH Factory",
     priceMoq1: 17.75,
     priceMoq4: 17.24,
-    weight: 600,
+    weight: 800,
     productSize: "255×245×60",
     srp: "₩39,000 / $29",
     unitsPerCarton: 8,
@@ -389,7 +435,7 @@ const frozenProducts: FobProduct[] = [
     manufacturer: "SLUNCH Factory",
     priceMoq1: 16.96,
     priceMoq4: 16.6,
-    weight: 600,
+    weight: 800,
     productSize: "255×245×60",
     srp: "₩39,000 / $29",
     unitsPerCarton: 8,
@@ -617,6 +663,12 @@ function getFobProduct(
 export default function FobPage() {
   const params = useParams();
   const lang = (params?.lang as string) ?? "ko";
+  const t = useTranslations("fob");
+  const TAB_LABELS: Record<string, string> = {
+    실온: t("tab_room"),
+    냉장: t("tab_cold"),
+    냉동: t("tab_frozen"),
+  };
   const [subTab, setSubTab] = useState<SubTabId>("roomtemp");
   const [simulatorStats, setSimulatorStats] = useState<Record<string, SimulatorStats | null>>({
     실온: null,
@@ -651,7 +703,7 @@ export default function FobPage() {
             sum +
             st.items.reduce((s, it) => {
               const fob = getFobProduct(cat, it.name);
-              return s + it.qty * (fob?.priceMoq4 ?? 0);
+              return s + it.qty * (fob?.unitsPerCarton ?? 0) * (fob?.priceMoq4 ?? 0);
             }, 0)
           );
         },
@@ -672,13 +724,13 @@ export default function FobPage() {
       <section className="bg-stone-50">
         <div className="mx-auto max-w-7xl px-4 py-12 text-center sm:px-6 sm:py-16 lg:px-8 lg:py-24">
           <h1 className="text-4xl font-bold tracking-tight text-[#171717] sm:text-5xl">
-            한눈에 알아보는 FOB 단가표
+            {t("hero_title")}
           </h1>
           <p className="mx-auto mt-4 max-w-xl text-base text-gray-500">
-            슬런치 팩토리의 전 제품을 FOB 기준으로 정리했습니다. 실온·냉장·냉동 카테고리별 단가, 물류 스펙, 인증 현황을 한 페이지에서 확인하세요.
+            {t("hero_subtitle")}
           </p>
           <p className="mt-3 text-xs text-gray-400">
-            SLUNCH Factory Co., Ltd. · FSSC 22000 / ISO 22000 / HACCP Certified · MOQ 협의 가능
+            {t("hero_note")}
           </p>
         </div>
       </section>
@@ -697,33 +749,33 @@ export default function FobPage() {
                   : "border-transparent text-gray-500 hover:text-gray-700"
               }`}
             >
-              {tab.label}
+              {TAB_LABELS[tab.label] ?? tab.label}
             </button>
           ))}
         </div>
       </div>
 
       {/* 3. 제품 테이블 (탭별 콘텐츠) */}
-      <section className="mx-auto max-w-7xl px-4 pb-20 pt-8 sm:px-6 lg:px-8">
-        <div className="max-h-[600px] overflow-x-auto overflow-y-auto">
+      <section className="w-full px-0 pb-20 pt-0">
+        <div className="max-h-[600px] overflow-x-auto overflow-y-auto border-t border-stone-200">
           <table className="w-full table-auto text-sm">
             <thead>
-              <tr className="sticky top-0 z-20 bg-stone-700 text-white">
-                <th className="px-5 py-4 text-left align-top">Product</th>
-                <th className="px-5 py-4 text-left align-top">FOB Unit Price</th>
-                <th className="px-5 py-4 text-left align-top">SRP</th>
-                <th className="px-5 py-4 text-left align-top">Weight</th>
-                <th className="px-5 py-4 text-left align-top">Units / Carton</th>
-                <th className="px-5 py-4 text-left align-top">Carton (Net/Gross)</th>
-                <th className="px-5 py-4 text-left align-top">Carton Size</th>
-                <th className="px-5 py-4 text-left align-top">CBM</th>
-                <th className="px-5 py-4 text-left align-top">Cartons / Pallet</th>
-                <th className="px-5 py-4 text-left align-top">Shelf Life</th>
-                <th className="px-5 py-4 text-left align-top">Ingredients</th>
-                <th className="px-5 py-4 text-left align-top">Origin</th>
-                <th className="px-5 py-4 text-left align-top">Certifications</th>
-                <th className="px-5 py-4 text-left align-top">MOQ</th>
-                <th className="px-5 py-4 text-left align-top">HS Code</th>
+              <tr className="sticky top-0 z-20 bg-stone-700 text-xs text-white">
+                <th className="w-48 px-5 py-3 text-left align-top font-medium">{t("col_product")}</th>
+                <th className="whitespace-nowrap px-5 py-3 text-left align-top">{t("col_fob_price")}</th>
+                <th className="whitespace-nowrap px-5 py-3 text-left align-top">{t("col_srp")}</th>
+                <th className="whitespace-nowrap px-5 py-3 text-left align-top">{t("col_weight")}</th>
+                <th className="whitespace-nowrap px-5 py-3 text-left align-top">{t("col_units_carton")}</th>
+                <th className="whitespace-nowrap px-5 py-3 text-left align-top">{t("col_carton_weight")}</th>
+                <th className="whitespace-nowrap px-5 py-3 text-left align-top">{t("col_carton_size")}</th>
+                <th className="whitespace-nowrap px-5 py-3 text-left align-top">{t("col_cbm")}</th>
+                <th className="whitespace-nowrap px-5 py-3 text-left align-top">{t("col_cartons_pallet")}</th>
+                <th className="whitespace-nowrap px-5 py-3 text-left align-top">{t("col_shelf_life")}</th>
+                <th className="w-52 min-w-52 whitespace-normal px-5 py-3 text-left align-top">{t("col_ingredients")}</th>
+                <th className="w-44 min-w-44 whitespace-normal px-5 py-3 text-left align-top">{t("col_origin")}</th>
+                <th className="whitespace-nowrap px-5 py-3 text-left align-top">{t("col_certs")}</th>
+                <th className="whitespace-nowrap px-5 py-3 text-left align-top">{t("col_moq")}</th>
+                <th className="whitespace-nowrap px-5 py-3 text-left align-top">{t("col_hs_code")}</th>
               </tr>
             </thead>
             <tbody>
@@ -732,16 +784,13 @@ export default function FobPage() {
                   key={`${row.kor}-${idx}`}
                   className={row.tbd ? "bg-stone-100" : idx % 2 === 0 ? "bg-white" : "bg-stone-50"}
                 >
-                  <td className="px-5 py-4 align-top">
-                    <div className="font-semibold text-[#171717]">{row.kor}</div>
-                    {!row.tbd && row.description && (
-                      <div className="mt-0.5 text-xs text-gray-400 italic line-clamp-2">{row.description}</div>
-                    )}
+                  <td className="w-48 min-w-48 px-5 py-3 align-top">
+                    <div className="whitespace-nowrap font-semibold text-sm text-[#171717]">{lang === "ko" ? row.kor : row.eng}</div>
                     {row.tbd && (
                       <p className="mt-1 text-xs italic text-gray-400">Spec sheet pending</p>
                     )}
                   </td>
-                  <td className="px-5 py-4 align-top">
+                  <td className="whitespace-nowrap px-5 py-3 align-top text-sm">
                     {row.tbd ? (
                       <span className="italic text-gray-400">—</span>
                     ) : (
@@ -757,34 +806,34 @@ export default function FobPage() {
                       </>
                     )}
                   </td>
-                  <td className="px-5 py-4 align-top">
+                  <td className="whitespace-nowrap px-5 py-3 align-top text-sm">
                     {row.tbd ? <span className="italic text-gray-400">—</span> : row.srp}
                   </td>
-                  <td className="px-5 py-4 align-top">
+                  <td className="whitespace-nowrap px-5 py-3 align-top text-sm">
                     {row.tbd ? (
                       <span className="italic text-gray-400">—</span>
                     ) : (
                       `${row.weight} g`
                     )}
                   </td>
-                  <td className="px-5 py-4 align-top">
+                  <td className="whitespace-nowrap px-5 py-3 align-top text-sm">
                     {row.tbd ? <span className="italic text-gray-400">—</span> : row.unitsPerCarton}
                   </td>
-                  <td className="px-5 py-4 align-top">
+                  <td className="whitespace-nowrap px-5 py-3 align-top text-sm">
                     {row.tbd ? (
                       <span className="italic text-gray-400">—</span>
                     ) : (
                       `Net ${row.cartonNet} kg / Gross ${row.cartonGross} kg`
                     )}
                   </td>
-                  <td className="px-5 py-4 align-top">
+                  <td className="whitespace-nowrap px-5 py-3 align-top text-sm">
                     {row.tbd ? (
                       <span className="italic text-gray-400">—</span>
                     ) : (
                       `${row.cartonSize} mm`
                     )}
                   </td>
-                  <td className="px-5 py-4 align-top">
+                  <td className="whitespace-nowrap px-5 py-3 align-top text-sm">
                     {row.tbd ? (
                       <span className="italic text-gray-400">—</span>
                     ) : row.cbm != null ? (
@@ -793,31 +842,31 @@ export default function FobPage() {
                       "—"
                     )}
                   </td>
-                  <td className="px-5 py-4 align-top">
+                  <td className="whitespace-nowrap px-5 py-3 align-top text-sm">
                     {row.tbd ? (
                       <span className="italic text-gray-400">—</span>
                     ) : (
                       <>
-                        {row.cartonsPerPallet}
+                        {localizeCartonsPallet(row.cartonsPerPallet, t)}
                         <br />
                         <span className="text-xs text-gray-500">{row.stacking}</span>
                       </>
                     )}
                   </td>
-                  <td className="px-5 py-4 align-top">
-                    {row.tbd ? <span className="italic text-gray-400">—</span> : row.shelfLife}
+                  <td className="whitespace-nowrap px-5 py-3 align-top text-sm">
+                    {row.tbd ? <span className="italic text-gray-400">—</span> : localizeShelfLife(row.shelfLife, t)}
                   </td>
-                  <td className="max-w-[200px] px-5 py-4 align-top">
+                  <td className="w-52 min-w-52 whitespace-normal px-5 py-3 align-top text-sm">
                     {row.tbd ? <span className="italic text-gray-400">—</span> : row.ingredients}
                   </td>
-                  <td className="max-w-[180px] px-5 py-4 align-top">
+                  <td className="w-44 min-w-44 whitespace-normal px-5 py-3 align-top text-sm">
                     {row.tbd ? <span className="italic text-gray-400">—</span> : row.origin}
                   </td>
-                  <td className="px-5 py-4 align-top">
+                  <td className="whitespace-nowrap px-5 py-3 align-top text-sm">
                     {row.tbd ? (
                       <span className="italic text-gray-400">—</span>
                     ) : (
-                      <div className="flex flex-wrap gap-1">
+                      <div className="flex flex-col gap-1">
                         {row.certifications?.map((c) => (
                           <span key={c} className={CERT_BADGE_CLASS[c] ?? "rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-700"}>
                             {c}
@@ -826,10 +875,10 @@ export default function FobPage() {
                       </div>
                     )}
                   </td>
-                  <td className="px-5 py-4 align-top">
-                    {row.tbd ? <span className="italic text-gray-400">—</span> : row.moq}
+                  <td className="whitespace-nowrap px-5 py-3 align-top text-sm">
+                    {row.tbd ? <span className="italic text-gray-400">—</span> : localizeCartonsPallet(row.moq, t)}
                   </td>
-                  <td className="px-5 py-4 align-top">
+                  <td className="whitespace-nowrap px-5 py-3 align-top text-sm">
                     {row.tbd ? <span className="italic text-gray-400">—</span> : row.hsCode}
                   </td>
                 </tr>
@@ -844,13 +893,13 @@ export default function FobPage() {
         <div className="mx-auto max-w-7xl px-4 py-16 sm:px-6 lg:px-8">
           <div className="mb-10 text-center">
             <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-[#C8202A]">
-              Pallet Load Simulator
+              {t("sim_label")}
             </p>
             <h2 className="text-2xl font-bold tracking-tight text-[#171717]">
-              팔레트 적재 시뮬레이터
+              {t("sim_title")}
             </h2>
             <p className="mt-2 text-sm text-gray-400">
-              제품과 수량을 선택하면 팔레트 위에 실시간으로 쌓아드립니다
+              {t("sim_subtitle")}
             </p>
           </div>
           <PalletSimulator onStatsChange={handleStatsChange} />
@@ -859,7 +908,7 @@ export default function FobPage() {
           <div className="mt-8">
             <div className="mb-4 flex items-center gap-2">
               <span className="text-xs font-semibold uppercase tracking-widest text-stone-400">
-                견적
+                {t("summary_section_label")}
               </span>
               <div className="h-px flex-1 bg-stone-200" />
             </div>
@@ -870,22 +919,22 @@ export default function FobPage() {
                 {!hasAnyStats ? (
                   <div className="overflow-hidden rounded-lg border border-stone-200">
                     <div className="bg-stone-100 px-5 py-2.5">
-                      <span className="text-sm font-semibold text-stone-400">제품 선택 대기 중</span>
+                      <span className="text-sm font-semibold text-stone-400">{t("summary_waiting")}</span>
                     </div>
                     <table className="w-full text-sm">
                       <thead>
                         <tr className="border-b border-stone-200 text-xs text-stone-400">
-                          <th className="px-5 py-2.5 text-left font-medium">제품명</th>
-                          <th className="px-5 py-2.5 text-center font-medium">박스수</th>
-                          <th className="px-5 py-2.5 text-center font-medium">입수</th>
-                          <th className="px-5 py-2.5 text-center font-medium">총 수량</th>
-                          <th className="px-5 py-2.5 text-right font-medium">소계</th>
+                          <th className="px-5 py-2.5 text-left font-medium">{t("summary_product")}</th>
+                          <th className="px-5 py-2.5 text-center font-medium">{t("summary_boxes")}</th>
+                          <th className="px-5 py-2.5 text-center font-medium">{t("summary_units")}</th>
+                          <th className="px-5 py-2.5 text-center font-medium">{t("summary_total_qty")}</th>
+                          <th className="px-5 py-2.5 text-right font-medium">{t("summary_total_price")}</th>
                         </tr>
                       </thead>
                       <tbody>
                         <tr>
                           <td colSpan={5} className="px-5 py-8 text-center text-xs text-stone-300">
-                            시뮬레이터에서 수량을 입력하고 적재하기를 누르면 자동으로 채워집니다
+                            {t("sim_subtitle")}
                           </td>
                         </tr>
                       </tbody>
@@ -898,17 +947,17 @@ export default function FobPage() {
                       return (
                         <div key={cat} className="overflow-hidden rounded-lg border border-stone-200">
                           <div className="flex items-center gap-2 bg-stone-100 px-5 py-2.5">
-                            <span className="text-sm font-semibold text-stone-700">{cat}</span>
+                            <span className="text-sm font-semibold text-stone-700">{TAB_LABELS[cat] ?? cat}</span>
                             <span className="text-xs text-stone-400">· {stats.containerLabel}</span>
                           </div>
                           <table className="w-full text-sm">
                             <thead>
                               <tr className="border-b border-stone-200 text-xs text-stone-400">
-                                <th className="px-5 py-2.5 text-left font-medium">제품명</th>
-                                <th className="px-5 py-2.5 text-center font-medium">박스수</th>
-                                <th className="px-5 py-2.5 text-center font-medium">입수</th>
-                                <th className="px-5 py-2.5 text-center font-medium">총 수량</th>
-                                <th className="px-5 py-2.5 text-right font-medium">소계</th>
+                                <th className="px-5 py-2.5 text-left font-medium">{t("summary_product")}</th>
+                                <th className="px-5 py-2.5 text-center font-medium">{t("summary_boxes")}</th>
+                                <th className="px-5 py-2.5 text-center font-medium">{t("summary_units")}</th>
+                                <th className="px-5 py-2.5 text-center font-medium">{t("summary_total_qty")}</th>
+                                <th className="px-5 py-2.5 text-right font-medium">{t("summary_total_price")}</th>
                               </tr>
                             </thead>
                             <tbody>
@@ -916,22 +965,48 @@ export default function FobPage() {
                                 const fob = getFobProduct(cat as "실온" | "냉장" | "냉동", item.name);
                                 const unitsPerCarton = fob?.unitsPerCarton ?? 0;
                                 const unitPrice = fob?.priceMoq4 ?? 0;
+                                const productName = fob ? (lang === "ko" ? fob.kor : fob.eng) : item.name;
                                 return (
                                   <tr key={item.id} className={i % 2 === 0 ? "bg-white" : "bg-stone-50"}>
-                                    <td className="px-5 py-3 font-medium text-stone-800">{item.name}</td>
+                                    <td className="px-5 py-3 font-medium text-stone-800">{productName}</td>
                                     <td className="px-5 py-3 text-center text-stone-600">{item.qty}</td>
-                                    <td className="px-5 py-3 text-center text-stone-600">{unitsPerCarton}개/박스</td>
-                                    <td className="px-5 py-3 text-center text-stone-600">{item.qty * unitsPerCarton}개</td>
-                                    <td className="px-5 py-3 text-right font-semibold">${(item.qty * unitPrice).toFixed(2)}</td>
+                                    <td className="px-5 py-3 text-center text-stone-600">{unitsPerCarton} / {t("unit_box")}</td>
+                                    <td className="px-5 py-3 text-center text-stone-600">{item.qty * unitsPerCarton}</td>
+                                    <td className="px-5 py-3 text-right font-semibold">${(item.qty * unitsPerCarton * unitPrice).toFixed(2)}</td>
                                   </tr>
                                 );
                               })}
                               <tr className="border-t border-stone-200 bg-stone-100">
-                                <td colSpan={4} className="px-5 py-2.5 text-right text-xs text-stone-500">소계</td>
+                                <td colSpan={4} className="px-5 py-2.5 text-right text-xs text-stone-500">{t("summary_subtotal")}</td>
                                 <td className="px-5 py-2.5 text-right font-bold">
-                                  ${stats.items.reduce((s, i) => s + i.qty * (getFobProduct(cat as "실온" | "냉장" | "냉동", i.name)?.priceMoq4 ?? 0), 0).toFixed(2)}
+                                  ${stats.items.reduce((s, i) => {
+                                    const f = getFobProduct(cat as "실온" | "냉장" | "냉동", i.name);
+                                    return s + i.qty * (f?.unitsPerCarton ?? 0) * (f?.priceMoq4 ?? 0);
+                                  }, 0).toFixed(2)}
                                 </td>
                               </tr>
+                              {(() => {
+                                const belowMoq = stats.items.filter(item => {
+                                  const fob = getFobProduct(cat as "실온" | "냉장" | "냉동", item.name);
+                                  const moqNum = parseInt((fob?.moq ?? "0").replace(/\D/g, ""), 10);
+                                  return item.qty > 0 && moqNum > 0 && item.qty < moqNum;
+                                });
+                                return belowMoq.length > 0 ? (
+                                  <tr>
+                                    <td colSpan={5} className="px-5 py-2 bg-red-50">
+                                      <p className="text-xs text-red-600 font-medium">
+                                        {t("summary_moq_warning")}{' '}
+                                        {belowMoq.map(i => {
+                                          const fob = getFobProduct(cat as "실온" | "냉장" | "냉동", i.name);
+                                          const productName = fob ? (lang === "ko" ? fob.kor : fob.eng) : i.name;
+                                          const moqLocalized = fob?.moq ? localizeCartonsPallet(fob.moq, t) : "";
+                                          return `${productName} (${t("summary_min")} ${moqLocalized}, ${t("summary_current")} ${i.qty} ${t("unit_box")})`;
+                                        }).join(' · ')}
+                                      </p>
+                                    </td>
+                                  </tr>
+                                ) : null;
+                              })()}
                             </tbody>
                           </table>
                         </div>
@@ -939,24 +1014,24 @@ export default function FobPage() {
                     })}
                     <div className="overflow-hidden rounded-lg border border-stone-300">
                       <div className="bg-stone-800 px-6 py-4">
-                        <h3 className="text-base font-semibold text-white">총 합계</h3>
+                        <h3 className="text-base font-semibold text-white">{t("summary_grand_title")}</h3>
                       </div>
                       <div className="bg-white px-6 py-5 flex items-end justify-between">
                         <div className="space-y-1.5 text-sm">
                           <div className="flex gap-8">
-                            <span className="text-stone-500">총 박스</span>
-                            <span className="font-semibold">{totalBoxes}박스</span>
+                            <span className="text-stone-500">{t("summary_total_boxes")}</span>
+                            <span className="font-semibold">{totalBoxes} {t("unit_box")}</span>
                           </div>
                           <div className="flex gap-8">
-                            <span className="text-stone-500">총 CBM</span>
+                            <span className="text-stone-500">{t("summary_total_cbm")}</span>
                             <span className="font-semibold">{totalCBM.toFixed(3)} CBM</span>
                           </div>
                           <p className="text-xs text-stone-400 pt-1">
-                            * FOB 가격 기준 · 해상운임, 보험료, 관세 및 현지 세금 별도
+                            {t("summary_disclaimer")}
                           </p>
                         </div>
                         <div className="text-right">
-                          <p className="text-xs uppercase tracking-wider text-stone-400 mb-1">총 견적 금액</p>
+                          <p className="text-xs uppercase tracking-wider text-stone-400 mb-1">{t("summary_grand_total")}</p>
                           <p className="text-3xl font-bold text-stone-900">
                             ${totalAmount.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                           </p>
@@ -970,23 +1045,27 @@ export default function FobPage() {
               {/* 우: 견적 문의 폼 — 항상 열려있음 */}
               <div className="h-fit overflow-hidden rounded-lg border border-stone-200">
                 <div className="rounded-t-lg bg-stone-800 px-6 py-5">
-                  <h2 className="text-lg font-semibold text-white">견적 문의</h2>
-                  <p className="mt-1 text-xs text-stone-400">담당자가 영업일 기준 1–2일 내 회신드립니다.</p>
+                  <h2 className="text-lg font-semibold text-white">{t("form_title")}</h2>
+                  <p className="mt-1 text-xs text-stone-400">{t("form_note")}</p>
                 </div>
                 {hasAnyStats && (
                   <div className="border-b border-stone-200 bg-stone-50 px-6 py-3">
-                    <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-stone-500">문의 견적 내용</p>
+                    <p className="mb-1.5 text-xs font-semibold uppercase tracking-wider text-stone-500">{t("form_summary_label")}</p>
                     <div className="space-y-0.5 text-xs text-stone-600">
                       {Object.entries(simulatorStats).map(([cat, stats]) => {
                         if (!stats || stats.items.length === 0) return null;
                         return (
                           <div key={cat}>
-                            <span className="font-semibold">{cat}</span>: {stats.items.map((i) => `${i.name} ${i.qty}박스`).join(", ")}
+                            <span className="font-semibold">{TAB_LABELS[cat] ?? cat}</span>: {stats.items.map((i) => {
+                              const fob = getFobProduct(cat as "실온" | "냉장" | "냉동", i.name);
+                              const name = fob ? (lang === "ko" ? fob.kor : fob.eng) : i.name;
+                              return `${name} ${i.qty} ${t("unit_box")}`;
+                            }).join(", ")}
                           </div>
                         );
                       })}
                       <div className="mt-1 border-t border-stone-200 pt-1 font-semibold text-stone-700">
-                        총 {totalBoxes}박스 · {totalCBM.toFixed(3)} CBM · ${totalAmount.toFixed(2)} USD FOB
+                        {t("summary_total_boxes")} {totalBoxes} {t("unit_box")} · {t("summary_total_cbm")} {totalCBM.toFixed(3)} · ${totalAmount.toFixed(2)} USD FOB
                       </div>
                     </div>
                   </div>
@@ -995,36 +1074,36 @@ export default function FobPage() {
                   <div className="grid grid-cols-2 gap-3">
                     <div>
                       <label className="mb-1 block text-xs font-semibold text-stone-600">
-                        이름 <span className="text-[#C8202A]">*</span>
+                        {t("form_name")} <span className="text-[#C8202A]">*</span>
                       </label>
                       <input
                         type="text"
-                        placeholder="홍길동"
+                        placeholder={t("form_name_placeholder")}
                         className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#C8202A]"
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs font-semibold text-stone-600">직함</label>
+                      <label className="mb-1 block text-xs font-semibold text-stone-600">{t("form_title_field")}</label>
                       <input
                         type="text"
-                        placeholder="구매 담당자"
+                        placeholder={t("form_title_placeholder")}
                         className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#C8202A]"
                       />
                     </div>
                   </div>
                   <div>
                     <label className="mb-1 block text-xs font-semibold text-stone-600">
-                      회사명 <span className="text-[#C8202A]">*</span>
+                      {t("form_company")} <span className="text-[#C8202A]">*</span>
                     </label>
                     <input
                       type="text"
-                      placeholder="회사명을 입력해주세요"
+                      placeholder={t("form_company_placeholder")}
                       className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#C8202A]"
                     />
                   </div>
                   <div>
                     <label className="mb-1 block text-xs font-semibold text-stone-600">
-                      이메일 <span className="text-[#C8202A]">*</span>
+                      {t("form_email")} <span className="text-[#C8202A]">*</span>
                     </label>
                     <input
                       type="email"
@@ -1034,7 +1113,7 @@ export default function FobPage() {
                   </div>
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="mb-1 block text-xs font-semibold text-stone-600">전화번호</label>
+                      <label className="mb-1 block text-xs font-semibold text-stone-600">{t("form_phone")}</label>
                       <input
                         type="tel"
                         placeholder="+1 (555) 000-0000"
@@ -1042,31 +1121,31 @@ export default function FobPage() {
                       />
                     </div>
                     <div>
-                      <label className="mb-1 block text-xs font-semibold text-stone-600">국가 / 지역</label>
+                      <label className="mb-1 block text-xs font-semibold text-stone-600">{t("form_country")}</label>
                       <input
                         type="text"
-                        placeholder="미국, 일본, 호주..."
+                        placeholder={t("form_country_placeholder")}
                         className="w-full rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#C8202A]"
                       />
                     </div>
                   </div>
                   <div>
-                    <label className="mb-1 block text-xs font-semibold text-stone-600">추가 문의 / 요청사항</label>
+                    <label className="mb-1 block text-xs font-semibold text-stone-600">{t("form_notes")}</label>
                     <textarea
                       rows={3}
-                      placeholder="납기, 포장 요청, 인증서 필요 여부 등 자유롭게 작성해주세요."
+                      placeholder={t("form_notes_placeholder")}
                       className="w-full resize-none rounded-lg border border-stone-300 px-3 py-2 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-[#C8202A]"
                     />
                   </div>
                   <button
                     type="button"
-                    onClick={() => alert("견적 문의가 접수되었습니다. 담당자가 곧 연락드리겠습니다.")}
+                    onClick={() => alert(t("form_alert"))}
                     className="w-full rounded-lg bg-[#C8202A] py-3 text-sm font-semibold text-white transition-colors hover:bg-[#a81920]"
                   >
-                    견적 문의 제출
+                    {t("form_submit")}
                   </button>
                   <p className="text-center text-xs text-stone-400">
-                    제출하신 정보는 견적 문의 목적으로만 사용됩니다.
+                    {t("form_privacy")}
                   </p>
                 </div>
               </div>

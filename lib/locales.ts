@@ -1,5 +1,14 @@
 /** 지원 언어 코드 */
-export const SUPPORTED_LOCALES = ["ko", "en", "fr", "ja", "zh", "ar", "de"] as const;
+export const SUPPORTED_LOCALES = [
+  "ko",
+  "en",
+  "fr",
+  "ja",
+  "zh",
+  "ar",
+  "de",
+  "ru"
+] as const;
 export type Locale = (typeof SUPPORTED_LOCALES)[number];
 
 /** 기본 언어 */
@@ -14,6 +23,7 @@ export const LOCALE_LABELS: Record<Locale, string> = {
   zh: "ZH",
   ar: "AR",
   de: "DE",
+  ru: "RU"
 };
 
 /** 브라우저 Accept-Language와 매칭할 언어 */
@@ -27,6 +37,7 @@ const BROWSER_TO_LOCALE: Record<string, Locale> = {
   zh: "zh",
   ar: "ar",
   de: "de",
+  ru: "ru"
 };
 
 export function getLocaleFromAcceptLanguage(acceptLanguage: string | null): Locale {

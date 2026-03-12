@@ -6,14 +6,15 @@ import { usePathname } from "next/navigation";
 import { useState, useRef, useEffect } from "react";
 import type { Locale } from "@/lib/locales";
 import { SUPPORTED_LOCALES, LOCALE_LABELS } from "@/lib/locales";
+import { useTranslations } from "next-intl";
 
 const NAV_ITEMS = [
-  { href: "about", label: "About" },
-  { href: "products", label: "Products" },
-  { href: "oem", label: "OEM" },
-  { href: "partnership", label: "Partnership" },
-  { href: "catering", label: "Catering" },
-  { href: "fob", label: "FOB Export" },
+  { href: "about", key: "about" },
+  { href: "products", key: "products" },
+  { href: "oem", key: "oem" },
+  { href: "partnership", key: "partnership" },
+  { href: "catering", key: "catering" },
+  { href: "fob", key: "fob" },
 ];
 
 type NavigationProps = {
@@ -21,6 +22,7 @@ type NavigationProps = {
 };
 
 export function Navigation({ lang }: NavigationProps) {
+  const tNav = useTranslations("navigation");
   const pathname = usePathname();
   const [mobileOpen, setMobileOpen] = useState(false);
   const [langOpen, setLangOpen] = useState(false);
@@ -56,7 +58,7 @@ export function Navigation({ lang }: NavigationProps) {
 
         {/* 데스크톱 메뉴 */}
         <div className="hidden items-center gap-8 md:flex">
-          {NAV_ITEMS.map(({ href, label }) => {
+          {NAV_ITEMS.map(({ href, key }) => {
             const to = `/${lang}/${href}`;
             const isActive = pathname === to || pathname.startsWith(to + "/");
             return (
@@ -67,7 +69,7 @@ export function Navigation({ lang }: NavigationProps) {
                   isActive ? "text-[#C8202A]" : "text-black hover:text-[#C8202A]"
                 }`}
               >
-                {label}
+                {tNav(key)}
               </Link>
             );
           })}
@@ -133,7 +135,7 @@ export function Navigation({ lang }: NavigationProps) {
       {mobileOpen && (
         <div className="border-t border-[#eeeeee] bg-white md:hidden">
           <ul className="flex flex-col px-5 py-4">
-            {NAV_ITEMS.map(({ href, label }) => {
+            {NAV_ITEMS.map(({ href, key }) => {
               const to = `/${lang}/${href}`;
               const isActive = pathname === to;
               return (
@@ -145,7 +147,7 @@ export function Navigation({ lang }: NavigationProps) {
                     }`}
                     onClick={() => setMobileOpen(false)}
                   >
-                    {label}
+                    {tNav(key)}
                   </Link>
                 </li>
               );

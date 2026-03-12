@@ -20,6 +20,24 @@ You can start editing the page by modifying `app/page.tsx`. The page auto-update
 
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
+## URL로 업데이트 내용 확인하기
+
+다국어(ko / en / ru) 적용된 페이지는 `/[lang]/경로` 형태입니다. 배포 후 아래 URL로 각 언어별 표시를 확인할 수 있습니다. (localhost 기준: `http://localhost:3000` 뒤에 경로 붙임)
+
+| 페이지 | 한국어 (ko) | 영어 (en) | 러시아어 (ru) |
+|--------|-------------|-----------|----------------|
+| 홈 | `/ko` | `/en` | `/ru` |
+| 제품 (전체) | `/ko/products` | `/en/products` | `/ru/products` |
+| 제품 — 김치 | `/ko/products/kimchi` | `/en/products/kimchi` | `/ru/products/kimchi` |
+| 제품 — 베이커리 | `/ko/products/bakery` | `/en/products/bakery` | `/ru/products/bakery` |
+| 제품 — 디저트 | `/ko/products/dessert` | `/en/products/dessert` | `/ru/products/dessert` |
+| 파트너십 | `/ko/partnership` | `/en/partnership` | `/ru/partnership` |
+| 케이터링 | `/ko/catering` | `/en/catering` | `/ru/catering` |
+| FOB 수출 (단가·시뮬레이터) | `/ko/fob` | `/en/fob` | `/ru/fob` |
+
+- **제품 하위**: 제품명·설명·스펙이 locale에 따라 ko/en/ru로 표시됩니다.
+- **FOB**: 단가표, 팔레트 시뮬레이터, 견적 요약·폼 문구가 모두 번역됩니다.
+
 ## Learn More
 
 To learn more about Next.js, take a look at the following resources:

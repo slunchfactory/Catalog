@@ -1,7 +1,9 @@
 'use client'
 
 import { useEffect, useRef, useState, useCallback } from 'react'
+import { useLocale, useTranslations } from 'next-intl'
 import * as THREE from 'three'
+import { getLocalizedText, type LocaleText } from '@/lib/products'
 
 type ProductItem = {
   id: string
@@ -11,15 +13,27 @@ type ProductItem = {
   h: number
   color: string
   accent: string
+  moq?: string
 }
 
-const PALLET_TYPES: Record<string, { label: string; w: number; d: number; maxH: number }> = {
-  ISO2: { label: '국제 (ISO2) · 1200×1000mm', w: 1200, d: 1000, maxH: 1800 },
-  EUR: { label: '유럽 (EUR/EPAL) · 1200×800mm', w: 1200, d: 800, maxH: 1800 },
-  GMA: { label: '미국 (GMA) · 1219×1016mm', w: 1219, d: 1016, maxH: 1800 },
-  JP: { label: '일본 · 1100×1100mm', w: 1100, d: 1100, maxH: 1800 },
-  AU: { label: '호주 · 1165×1165mm', w: 1165, d: 1165, maxH: 1800 },
+const palletOptions = [
+  { id: 'iso2', labelKey: 'sim_pallet_iso2', w: 1200, d: 1000 },
+  { id: 'eur', labelKey: 'sim_pallet_eur', w: 1200, d: 800 },
+  { id: 'gma', labelKey: 'sim_pallet_gma', w: 1219, d: 1016 },
+  { id: 'japan', labelKey: 'sim_pallet_japan', w: 1100, d: 1100 },
+  { id: 'aus', labelKey: 'sim_pallet_aus', w: 1165, d: 1165 },
+]
+
+const HEIGHT_THRESHOLD_KEYS: Record<number, string> = {
+  1500: 'sim_limit_truck',
+  1556: 'sim_limit_coupang',
+  2200: 'sim_limit_fob',
 }
+const HEIGHT_THRESHOLDS = [
+  { limit: 1500, color: 'text-yellow-500' },
+  { limit: 1556, color: 'text-orange-500' },
+  { limit: 2200, color: 'text-red-600' },
+]
 
 const CONTAINER_TYPES: Record<string, {
   label: string
@@ -37,32 +51,54 @@ const CONTAINER_TYPES: Record<string, {
 }
 
 const ROOM_TEMP_PRODUCTS: ProductItem[] = [
-  { id: 'kimchi-rice', name: '비건 김치볶음밥 밀키트', w: 410, d: 306, h: 306, color: '#E63946', accent: '#E63946' },
-  { id: 'kimchi-can', name: '비건 김치캔', w: 442, d: 300, h: 115, color: '#2D6A4F', accent: '#2D6A4F' },
-  { id: 'kimchi-pancake', name: '비건 김치전 밀키트', w: 410, d: 306, h: 306, color: '#E9C46A', accent: '#E9C46A' },
-  { id: 'kalguksu', name: '김치칼국수 밀키트', w: 440, d: 350, h: 330, color: '#264653', accent: '#264653' },
+  { id: 'kimchi-rice', name: '비건 김치볶음밥 밀키트', w: 410, d: 306, h: 306, color: '#E63946', accent: '#E63946', moq: '56박스' },
+  { id: 'kimchi-can', name: '비건 김치캔', w: 442, d: 300, h: 115, color: '#2D6A4F', accent: '#2D6A4F', moq: '108박스' },
+  { id: 'kimchi-pancake', name: '비건 김치전 밀키트', w: 410, d: 306, h: 306, color: '#E9C46A', accent: '#E9C46A', moq: '56박스' },
+  { id: 'kalguksu', name: '김치칼국수 밀키트', w: 440, d: 350, h: 330, color: '#264653', accent: '#264653', moq: '36박스' },
 ]
 
 const REFRIGERATED_PRODUCTS: ProductItem[] = [
-  { id: 'ranch', name: '비건 랜치 소스', w: 460, d: 340, h: 165, color: '#00B4D8', accent: '#00B4D8' },
-  { id: 'lemon', name: '레몬드레싱 소스', w: 460, d: 340, h: 165, color: '#F4A261', accent: '#F4A261' },
-  { id: 'buncha', name: '분짜 소스', w: 460, d: 340, h: 165, color: '#E76F51', accent: '#E76F51' },
-  { id: 'balsamic', name: '발사믹 드레싱', w: 460, d: 340, h: 165, color: '#6D2B2B', accent: '#6D2B2B' },
-  { id: 'oriental', name: '오리엔탈 드레싱', w: 460, d: 340, h: 165, color: '#457B9D', accent: '#457B9D' },
-  { id: 'gamtae', name: '감태 버터', w: 400, d: 335, h: 150, color: '#1B4332', accent: '#1B4332' },
-  { id: 'pesto', name: '매생이 페스토', w: 400, d: 335, h: 150, color: '#52B788', accent: '#52B788' },
+  { id: 'ranch', name: '비건 랜치 소스', w: 460, d: 340, h: 165, color: '#00B4D8', accent: '#00B4D8', moq: '60박스' },
+  { id: 'lemon', name: '레몬드레싱 소스', w: 460, d: 340, h: 165, color: '#F4A261', accent: '#F4A261', moq: '60박스' },
+  { id: 'buncha', name: '분짜 소스', w: 460, d: 340, h: 165, color: '#E76F51', accent: '#E76F51', moq: '60박스' },
+  { id: 'balsamic', name: '발사믹 드레싱', w: 460, d: 340, h: 165, color: '#6D2B2B', accent: '#6D2B2B', moq: '60박스' },
+  { id: 'oriental', name: '오리엔탈 드레싱', w: 460, d: 340, h: 165, color: '#457B9D', accent: '#457B9D', moq: '60박스' },
+  { id: 'gamtae', name: '감태 버터', w: 400, d: 335, h: 150, color: '#1B4332', accent: '#1B4332', moq: '80박스' },
+  { id: 'pesto', name: '매생이 페스토', w: 400, d: 335, h: 150, color: '#52B788', accent: '#52B788', moq: '80박스' },
 ]
 
 const FROZEN_PRODUCTS: ProductItem[] = [
-  { id: 'blueberry-tart', name: '비건 블루베리 타르트', w: 510, d: 260, h: 290, color: '#7B2D8B', accent: '#7B2D8B' },
-  { id: 'peach-tart', name: '비건 복숭아 타르트', w: 510, d: 260, h: 290, color: '#F4845F', accent: '#F4845F' },
-  { id: 'gnocchi', name: '시금치 뇨끼 밀키트', w: 430, d: 310, h: 290, color: '#4A7C59', accent: '#4A7C59' },
-  { id: 'penne', name: '매생이 크림 펜네', w: 430, d: 310, h: 290, color: '#3A7D44', accent: '#3A7D44' },
-  { id: 'risotto', name: '매생이 트러플 리조또', w: 430, d: 310, h: 290, color: '#5C4033', accent: '#5C4033' },
-  { id: 'peach-slice', name: '복숭아타르트 조각', w: 440, d: 330, h: 290, color: '#FFBA49', accent: '#FFBA49' },
-  { id: 'blueberry-slice', name: '블루베리타르트 조각', w: 440, d: 330, h: 290, color: '#9B5DE5', accent: '#9B5DE5' },
-  { id: 'chocobar', name: '피넛버터초코바', w: 440, d: 330, h: 290, color: '#8B4513', accent: '#8B4513' },
+  { id: 'blueberry-tart', name: '비건 블루베리 타르트', w: 510, d: 260, h: 290, color: '#7B2D8B', accent: '#7B2D8B', moq: '30박스' },
+  { id: 'peach-tart', name: '비건 복숭아 타르트', w: 510, d: 260, h: 290, color: '#F4845F', accent: '#F4845F', moq: '30박스' },
+  { id: 'gnocchi', name: '시금치 뇨끼 밀키트', w: 430, d: 310, h: 290, color: '#4A7C59', accent: '#4A7C59', moq: '40박스' },
+  { id: 'penne', name: '매생이 크림 펜네', w: 430, d: 310, h: 290, color: '#3A7D44', accent: '#3A7D44', moq: '40박스' },
+  { id: 'risotto', name: '매생이 트러플 리조또', w: 430, d: 310, h: 290, color: '#5C4033', accent: '#5C4033', moq: '40박스' },
+  { id: 'peach-slice', name: '복숭아타르트 조각', w: 440, d: 330, h: 290, color: '#FFBA49', accent: '#FFBA49', moq: '40박스' },
+  { id: 'blueberry-slice', name: '블루베리타르트 조각', w: 440, d: 330, h: 290, color: '#9B5DE5', accent: '#9B5DE5', moq: '40박스' },
+  { id: 'chocobar', name: '피넛버터초코바', w: 440, d: 330, h: 290, color: '#8B4513', accent: '#8B4513', moq: '40박스' },
 ]
+
+const SIM_PRODUCT_NAMES: Record<string, LocaleText> = {
+  'kimchi-rice': { ko: '비건 김치볶음밥 밀키트', en: 'Vegan Kimchi Fried Rice Meal Kit', ru: 'Веганский набор жареный рис с кимчи' },
+  'kimchi-can': { ko: '비건 김치캔', en: 'Vegan Kimchi Can', ru: 'Веганское кимчи в банке' },
+  'kimchi-pancake': { ko: '비건 김치전 밀키트', en: 'Vegan Kimchi Pancake', ru: 'Веганский блин с кимчи' },
+  'kalguksu': { ko: '김치칼국수 밀키트', en: 'Slunch Kimchi Kalguksu Meal Kit', ru: 'Набор Кимчи Кальгуксу' },
+  'ranch': { ko: '비건 랜치 소스', en: 'Vegan Ranch Sauce', ru: 'Веганский соус ранч' },
+  'lemon': { ko: '레몬드레싱 소스', en: 'Lemon Dressing', ru: 'Лимонный дрессинг' },
+  'buncha': { ko: '분짜 소스', en: 'Bun Cha Sauce', ru: 'Соус бунча' },
+  'balsamic': { ko: '발사믹 드레싱', en: 'Balsamic Sauce', ru: 'Бальзамический соус' },
+  'oriental': { ko: '오리엔탈 드레싱', en: 'Oriental Sauce', ru: 'Ориентал соус' },
+  'gamtae': { ko: '감태 버터', en: 'Gamtae Butter', ru: 'Масло камтэ' },
+  'pesto': { ko: '매생이 페스토', en: 'Maesaengi Pesto', ru: 'Песто мэсэнги' },
+  'blueberry-tart': { ko: '비건 블루베리 타르트', en: 'Vegan Blueberry Tart', ru: 'Веганский тарт с черникой' },
+  'peach-tart': { ko: '비건 복숭아 타르트', en: 'Vegan Peach Tart', ru: 'Веганский тарт с персиком' },
+  'gnocchi': { ko: '시금치 뇨끼 밀키트', en: 'Spinach Gnocchi Meal Kit', ru: 'Набор ньокки со шпинатом' },
+  'penne': { ko: '매생이 크림 펜네', en: 'Maesaengi Cream Penne', ru: 'Пенне с кремом мэсэнги' },
+  'risotto': { ko: '매생이 트러플 리조또', en: 'Maesaengi Truffle Risotto', ru: 'Ризотто мэсэнги с трюфелем' },
+  'peach-slice': { ko: '복숭아타르트 조각', en: 'Vegan Peach Tart (1/6 piece)', ru: 'Кусок тарта с персиком' },
+  'blueberry-slice': { ko: '블루베리타르트 조각', en: 'Vegan Blueberry Tart (1/6 piece)', ru: 'Кусок тарта с черникой' },
+  'chocobar': { ko: '피넛버터초코바', en: 'Vegan Peanut Butter Choco Bar', ru: 'Веганский батончик арахис-шоколад' },
+}
 
 const ALL_PRODUCTS = [...ROOM_TEMP_PRODUCTS, ...REFRIGERATED_PRODUCTS, ...FROZEN_PRODUCTS]
 
@@ -140,6 +176,7 @@ export type SimulatorStats = {
     qty: number
     unitsPerCarton?: number
     unitPrice?: number
+    moq?: string
   }>
 }
 
@@ -149,11 +186,9 @@ export type PalletSimulatorProps = {
 
 function computeStatsFromQtys(
   qtys: Record<string, number>,
-  palletType: string
+  spec: PalletSpec
 ): Record<string, SimulatorStats | null> {
-  const pallet = PALLET_TYPES[palletType]
-  if (!pallet) return { 실온: null, 냉장: null, 냉동: null }
-  const palletVolume = (pallet.w * pallet.d * pallet.maxH) / 1e9
+  const palletVolume = (spec.w * spec.d * spec.maxH) / 1e9
   const result: Record<string, SimulatorStats | null> = { 실온: null, 냉장: null, 냉동: null }
   const categories = ['실온', '냉장', '냉동'] as const
   for (const cat of categories) {
@@ -170,12 +205,12 @@ function computeStatsFromQtys(
     if (!container) continue
     const palletsNeeded = Math.ceil(totalCBM / palletVolume)
     const containersNeeded = Math.ceil(totalCBM / container.cbm)
-    const byId: Record<string, { name: string; qty: number }> = {}
+    const byId: Record<string, { name: string; qty: number; moq?: string }> = {}
     for (const p of productList) {
-      if (!byId[p.id]) byId[p.id] = { name: p.name, qty: 0 }
+      if (!byId[p.id]) byId[p.id] = { name: p.name, qty: 0, moq: p.moq }
       byId[p.id].qty += 1
     }
-    const items = Object.entries(byId).map(([id, { name, qty }]) => ({ id, name, qty }))
+    const items = Object.entries(byId).map(([id, { name, qty, moq }]) => ({ id, name, qty, moq }))
     result[cat] = {
       category: cat,
       totalBoxes: productList.length,
@@ -221,8 +256,12 @@ function buildScene(scene: THREE.Scene, camera: THREE.PerspectiveCamera) {
   camera.lookAt(0, 0.5, 0)
 }
 
+const TAB_KEYS: Record<string, string> = { '실온': 'tab_room', '냉장': 'tab_cold', '냉동': 'tab_frozen' }
+
 export default function PalletSimulator(props: PalletSimulatorProps = {}) {
   const { onStatsChange } = props
+  const locale = useLocale()
+  const t = useTranslations('fob')
   const mountRefs = useRef<Record<string, HTMLDivElement | null>>({
     '실온': null, '냉장': null, '냉동': null,
   })
@@ -253,9 +292,10 @@ export default function PalletSimulator(props: PalletSimulatorProps = {}) {
 
   const [activeCategory, setActiveCategory] = useState<'실온' | '냉장' | '냉동'>('실온')
   const [selectedProducts, setSelectedProducts] = useState<Record<string, number>>({})
-  const [palletType, setPalletType] = useState<string>('ISO2')
+  const [palletType, setPalletType] = useState<string>('japan')
   const [containerType, setContainerType] = useState<string>('40ft_HC_dry')
   const [placedBoxes, setPlacedBoxes] = useState<any[]>([])
+  const [currentLoadHeightMm, setCurrentLoadHeightMm] = useState<number | null>(null)
   const [isAnimating, setIsAnimating] = useState(false)
   const [stats, setStats] = useState<{
     totalBoxes: number
@@ -288,14 +328,14 @@ export default function PalletSimulator(props: PalletSimulatorProps = {}) {
     activeCategoryRef.current = activeCategory
   }, [activeCategory])
 
-  // Three.js 씬 초기화 — 탭별 독립 renderer + scene + camera
+  // Three.js 씬 초기화 — 탭별 독립 renderer + scene + camera (크기 0이면 스킵, resize 시 재시도)
   useEffect(() => {
-    CATEGORIES.forEach((cat) => {
+    function initCategory(cat: (typeof CATEGORIES)[number]) {
       const mount = mountRefs.current[cat]
       if (!mount || rendererRefs.current[cat]) return
-
       const W = mount.clientWidth
       const H = mount.clientHeight
+      if (W === 0 || H === 0) return
 
       const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false })
       renderer.setSize(W, H)
@@ -312,23 +352,30 @@ export default function PalletSimulator(props: PalletSimulatorProps = {}) {
       cameraRefs.current[cat] = camera
 
       buildScene(scene, camera)
-      palletGroupRefs.current[cat] = buildPallet(scene, PALLET_TYPES['ISO2'])
+      const defaultOpt = palletOptions.find((p) => p.id === 'japan')!
+      palletGroupRefs.current[cat] = buildPallet(scene, { ...defaultOpt, maxH: 2200 })
 
       const animate = () => {
         animFrameRefs.current[cat] = requestAnimationFrame(animate)
         renderer.render(scene, camera)
       }
       animate()
+    }
+
+    const raf = requestAnimationFrame(() => {
+      CATEGORIES.forEach(initCategory)
     })
 
     const handleResize = () => {
       CATEGORIES.forEach((cat) => {
+        initCategory(cat)
         const mount = mountRefs.current[cat]
         const renderer = rendererRefs.current[cat]
         const camera = cameraRefs.current[cat]
         if (!mount || !renderer || !camera) return
         const w = mount.clientWidth
         const h = mount.clientHeight
+        if (w === 0 || h === 0) return
         camera.aspect = w / h
         camera.updateProjectionMatrix()
         renderer.setSize(w, h)
@@ -337,6 +384,7 @@ export default function PalletSimulator(props: PalletSimulatorProps = {}) {
     window.addEventListener('resize', handleResize)
 
     return () => {
+      cancelAnimationFrame(raf)
       CATEGORIES.forEach((cat) => {
         cancelAnimationFrame(animFrameRefs.current[cat])
         const renderer = rendererRefs.current[cat]
@@ -355,10 +403,21 @@ export default function PalletSimulator(props: PalletSimulatorProps = {}) {
     }
   }, [])
 
+  // 마운트 후 resize 강제 발생 → 렌더러 크기 재설정
+  useEffect(() => {
+    window.dispatchEvent(new Event('resize'))
+  }, [])
+
+  // effective spec: 선택 팔레트 (w,d) + maxH 2200mm 고정
+  const getEffectivePalletSpec = useCallback((): PalletSpec => {
+    const opt = palletOptions.find((p) => p.id === palletType)
+    if (!opt) return { w: 1100, d: 1100, maxH: 2200 }
+    return { ...opt, maxH: 2200 }
+  }, [palletType])
+
   // 팔레트 규격 변경 시 3개 탭 씬 모두 팔레트 업데이트
   useEffect(() => {
-    const spec = PALLET_TYPES[palletType]
-    if (!spec) return
+    const spec = getEffectivePalletSpec()
     CATEGORIES.forEach((cat) => {
       const scene = sceneRefs.current[cat]
       if (!scene) return
@@ -369,7 +428,7 @@ export default function PalletSimulator(props: PalletSimulatorProps = {}) {
       }
       palletGroupRefs.current[cat] = buildPallet(scene, spec)
     })
-  }, [palletType])
+  }, [palletType, getEffectivePalletSpec])
 
   const computePlacements = useCallback((
     products: ProductItem[],
@@ -524,9 +583,10 @@ export default function PalletSimulator(props: PalletSimulatorProps = {}) {
         const h = placement.h * SCALE
         const d = placement.d * SCALE
         const geo = new THREE.BoxGeometry(w - 0.005, h - 0.005, d - 0.005)
-        const base = new THREE.MeshLambertMaterial({ color: placement.color || '#EFEFEF' })
-        const side = new THREE.MeshLambertMaterial({ color: lighten(placement.color || '#EFEFEF', -15) })
-        const top = new THREE.MeshLambertMaterial({ color: lighten(placement.color || '#EFEFEF', 15) })
+        const baseColor = placement.color || '#f5a623'
+        const base = new THREE.MeshLambertMaterial({ color: baseColor })
+        const side = new THREE.MeshLambertMaterial({ color: lighten(baseColor, -15) })
+        const top = new THREE.MeshLambertMaterial({ color: lighten(baseColor, 15) })
         const mesh = new THREE.Mesh(geo, [side, side, top, base, base, side])
         mesh.castShadow = true
         mesh.receiveShadow = true
@@ -573,6 +633,7 @@ export default function PalletSimulator(props: PalletSimulatorProps = {}) {
     clearBoxes(activeCategoryRef.current)
     setSelectedProducts({})
     setPlacedBoxes([])
+    setCurrentLoadHeightMm(null)
     setStats(null)
     const empty = { '실온': null, '냉장': null, '냉동': null }
     setStatsPerCategory(empty)
@@ -606,10 +667,21 @@ export default function PalletSimulator(props: PalletSimulatorProps = {}) {
         [id]: Math.max(0, (selectedProducts[id] ?? 0) + delta),
       }
       setSelectedProducts(newQtys)
-      const next = computeStatsFromQtys(newQtys, palletType)
+      const next = computeStatsFromQtys(newQtys, getEffectivePalletSpec())
       onStatsChange?.(next)
     },
-    [selectedProducts, palletType, onStatsChange]
+    [selectedProducts, getEffectivePalletSpec, onStatsChange]
+  )
+
+  const updateQty = useCallback(
+    (id: string, val: number) => {
+      const num = Math.max(0, val)
+      const newQtys = { ...selectedProducts, [id]: num }
+      setSelectedProducts(newQtys)
+      const next = computeStatsFromQtys(newQtys, getEffectivePalletSpec())
+      onStatsChange?.(next)
+    },
+    [selectedProducts, getEffectivePalletSpec, onStatsChange]
   )
 
   const runSimulation = useCallback(async () => {
@@ -625,12 +697,16 @@ export default function PalletSimulator(props: PalletSimulatorProps = {}) {
       setIsAnimating(false)
       return
     }
-    const pallet = PALLET_TYPES[palletType]
+    const pallet = getEffectivePalletSpec()
     const container = CONTAINER_TYPES[containerType]
     // 부피 내림차순 정렬 — 큰 박스 먼저 배치해 무거운 것이 아래로
     const sorted = [...productList].sort((a, b) => (b.w * b.d * b.h) - (a.w * a.d * a.h))
     const placements = computePlacements(sorted, pallet, activeCategory)
     setPlacedBoxes(placements)
+    const loadHeightMm = placements.length
+      ? Math.max(...placements.map((p) => p.y + p.h))
+      : 0
+    setCurrentLoadHeightMm(loadHeightMm)
 
     const totalCBM = productList.reduce((s, p) => s + (p.w * p.d * p.h) / 1e9, 0)
     const palletVolume = (pallet.w * pallet.d * pallet.maxH) / 1e9
@@ -638,12 +714,12 @@ export default function PalletSimulator(props: PalletSimulatorProps = {}) {
     const containersNeeded = Math.ceil(totalCBM / container.cbm)
     const containerLabel = container.label
 
-    const byId: Record<string, { name: string; qty: number }> = {}
+    const byId: Record<string, { name: string; qty: number; moq?: string }> = {}
     for (const p of productList) {
-      if (!byId[p.id]) byId[p.id] = { name: p.name, qty: 0 }
+      if (!byId[p.id]) byId[p.id] = { name: p.name, qty: 0, moq: p.moq }
       byId[p.id].qty += 1
     }
-    const items = Object.entries(byId).map(([id, { name, qty }]) => ({ id, name, qty }))
+    const items = Object.entries(byId).map(([id, { name, qty, moq }]) => ({ id, name, qty, moq }))
 
     const newStats: SimulatorStats = {
       category: activeCategory,
@@ -664,7 +740,8 @@ export default function PalletSimulator(props: PalletSimulatorProps = {}) {
 
     setStatsPerCategory((prev) => {
       const next = { ...prev, [activeCategory]: newStats }
-      onStatsChange?.(next)
+      // Defer parent callback so we don't update FobPage during PalletSimulator's render
+      setTimeout(() => onStatsChange?.(next), 0)
       return next
     })
 
@@ -672,15 +749,15 @@ export default function PalletSimulator(props: PalletSimulatorProps = {}) {
       await addBoxToScene(placements[i], i * 120, pallet, activeCategory)
     }
     setIsAnimating(false)
-  }, [selectedProducts, isAnimating, palletType, containerType, activeCategory, computePlacements, addBoxToScene, clearBoxes, onStatsChange])
+  }, [selectedProducts, isAnimating, getEffectivePalletSpec, containerType, activeCategory, computePlacements, addBoxToScene, clearBoxes, onStatsChange])
 
   const totalBoxes = Object.values(selectedProducts).reduce((s, v) => s + v, 0)
 
   return (
-    <div className="flex h-[600px] overflow-hidden rounded-xl border border-stone-200 bg-[#F5F0EB]">
+    <div className="flex h-[600px] flex-col overflow-hidden rounded-xl border border-stone-200 bg-[#F5F0EB]">
       {/* 탭: 실온 / 냉장 / 냉동 */}
-      <div className="flex w-full flex-col">
-        <div className="flex border-b border-stone-200 bg-[#FDFAF7]">
+      <div className="flex flex-1 w-full flex-col min-h-0">
+        <div className="flex flex-shrink-0 border-b border-stone-200 bg-[#FDFAF7]">
           {(['실온', '냉장', '냉동'] as const).map((cat) => {
             const catProducts = CATEGORY_PRODUCTS[cat]
             const catQty = catProducts.reduce((s, p) => s + (selectedProducts[p.id] || 0), 0)
@@ -695,7 +772,7 @@ export default function PalletSimulator(props: PalletSimulatorProps = {}) {
                     : 'text-gray-400 hover:text-gray-600'
                 }`}
               >
-                {cat}
+                {TAB_KEYS[cat] ? t(TAB_KEYS[cat] as 'tab_room') : cat}
                 {catQty > 0 && (
                   <span className="rounded-full bg-[#C8202A] px-1.5 py-0.5 text-[9px] leading-none text-white">
                     {catQty}
@@ -713,21 +790,21 @@ export default function PalletSimulator(props: PalletSimulatorProps = {}) {
             <div className="flex-shrink-0 space-y-1.5 border-b border-stone-100 px-3 py-2">
               <div>
                 <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-                  팔레트 규격
+                  {t('sim_pallet_size')}
                 </label>
                 <select
                   value={palletType}
                   onChange={(e) => setPalletType(e.target.value)}
                   className="w-full rounded-md border border-stone-200 bg-white px-2 py-1.5 text-xs text-gray-700 focus:border-stone-400 focus:outline-none"
                 >
-                  {Object.entries(PALLET_TYPES).map(([key, val]) => (
-                    <option key={key} value={key}>{val.label}</option>
+                  {palletOptions.map((p) => (
+                    <option key={p.id} value={p.id}>{t(p.labelKey as 'sim_pallet_iso2')} · {p.w}×{p.d}mm</option>
                   ))}
                 </select>
               </div>
               <div>
                 <label className="mb-0.5 block text-[10px] font-semibold uppercase tracking-wider text-gray-400">
-                  컨테이너 규격
+                  {t('sim_container_size')}
                 </label>
                 <select
                   value={containerType}
@@ -753,7 +830,7 @@ export default function PalletSimulator(props: PalletSimulatorProps = {}) {
                   <div key={p.id} className="flex items-center gap-2 border-b border-stone-100 px-3 py-2">
                     <span className="w-5 h-5 flex-shrink-0 rounded-sm" style={{ backgroundColor: p.color }} />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-xs font-semibold text-[#1A1A1A]">{p.name}</p>
+                      <p className="truncate text-xs font-semibold text-[#1A1A1A]">{getLocalizedText(SIM_PRODUCT_NAMES[p.id] ?? { ko: p.name, en: p.name, ru: p.name }, locale)}</p>
                       <p className="text-[10px] text-gray-400">{p.w}×{p.d}×{p.h} mm</p>
                     </div>
                     <div className="flex flex-shrink-0 items-center gap-2">
@@ -764,7 +841,20 @@ export default function PalletSimulator(props: PalletSimulatorProps = {}) {
                       >
                         −
                       </button>
-                      <span className="w-4 text-center text-xs font-bold" style={{ color: qty > 0 ? '#C8202A' : '#CCC' }}>{qty}</span>
+                      <input
+                        type="number"
+                        min={0}
+                        value={qty || ''}
+                        placeholder="0"
+                        onChange={(e) => {
+                          const val = parseInt(e.target.value, 10)
+                          updateQty(p.id, Number.isNaN(val) ? 0 : val)
+                        }}
+                        onBlur={(e) => {
+                          if (e.target.value === '') updateQty(p.id, 0)
+                        }}
+                        className="w-12 rounded border border-stone-300 px-1 py-0.5 text-center text-sm font-semibold placeholder:text-stone-400 focus:border-[#C8202A] focus:outline-none [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+                      />
                       <button
                         type="button"
                         onClick={() => handleQtyChange(p.id, 1)}
@@ -790,52 +880,70 @@ export default function PalletSimulator(props: PalletSimulatorProps = {}) {
                   cursor: totalBoxes > 0 && !isAnimating ? 'pointer' : 'not-allowed',
                 }}
               >
-                {isAnimating ? '적재 중...' : `${totalBoxes}박스 적재하기`}
+                {isAnimating ? t('sim_loading_btn') : t('sim_calculate_btn', { count: totalBoxes })}
               </button>
               <button
                 type="button"
                 onClick={handleClear}
                 className="w-full rounded-lg border border-stone-200 py-1.5 text-xs text-gray-400 hover:border-stone-300"
               >
-                초기화
+                {t('sim_reset')}
               </button>
             </div>
           </div>
 
           {/* 오른쪽 3D 뷰포트 — 탭별 독립 canvas, 현재 탭만 표시 */}
-          <div className="relative flex-1">
+          <div className="relative flex-1 min-h-[400px]">
             {CATEGORIES.map((cat) => (
               <div
                 key={cat}
                 ref={(el) => { mountRefs.current[cat] = el }}
-                className="absolute inset-0 h-full w-full"
+                className="absolute inset-0 h-full w-full min-h-[400px]"
                 style={{ visibility: activeCategory === cat ? 'visible' : 'hidden', pointerEvents: activeCategory === cat ? 'auto' : 'none' }}
               />
             ))}
             {/* 좌상단: 보관 조건 */}
             <div className="absolute left-2 top-2 text-left">
               {activeCategory === '실온' && (
-                <p className="text-[10px] leading-relaxed text-gray-400">
-                  Dry Container · 실온 보관<br />온도 제어 불필요
+                <p className="text-[10px] leading-relaxed text-gray-600">
+                  {t('sim_storage_room_1')}<br />{t('sim_storage_room_2')}
                 </p>
               )}
               {activeCategory === '냉장' && (
-                <p className="text-[10px] leading-relaxed text-gray-400">
-                  Reefer · 0~+10°C<br />벽면 100mm 이격 · 박스 간 50mm 공기 통로<br />공기 순환으로 균일 냉각
+                <p className="text-[10px] leading-relaxed text-gray-600">
+                  {t('sim_storage_cold_1')}<br />{t('sim_storage_cold_2')}<br />{t('sim_storage_cold_3')}
                 </p>
               )}
               {activeCategory === '냉동' && (
                 <p className="text-[10px] leading-relaxed text-gray-600">
-                  Reefer · -18°C 이하<br />선적 전 예냉(pre-cooling) 필수<br />밀착 적재 · T-floor 바닥 통풍
+                  {t('sim_storage_frozen_1')}<br />{t('sim_storage_frozen_2')}<br />{t('sim_storage_frozen_3')}
                 </p>
               )}
             </div>
+            {/* 좌측 하단: 적재 높이 및 임계값 경고 */}
+            {currentLoadHeightMm !== null && (
+              <div className="absolute bottom-2 left-2 right-2 min-w-[200px] rounded-lg border border-stone-200 bg-white/90 px-2.5 py-2 shadow-sm backdrop-blur-sm">
+                <div className="space-y-1">
+                  <p className="text-sm text-stone-500">
+                    {t('sim_load_height')} <span className="font-semibold text-stone-800">{currentLoadHeightMm}mm</span>
+                  </p>
+                  {HEIGHT_THRESHOLDS.map(
+                    (th) =>
+                      currentLoadHeightMm > th.limit && (
+                        <p key={th.limit} className={`text-xs font-medium ${th.color}`}>
+                          ⚠ {t('sim_height_over', { limit: th.limit, label: t(HEIGHT_THRESHOLD_KEYS[th.limit] as 'sim_limit_truck') })}
+                        </p>
+                      )
+                  )}
+                </div>
+              </div>
+            )}
             {/* 우상단: Stats (박스~적재율) — 길게 */}
             {stats && (
               <div className="absolute right-2 top-2 min-w-[240px] rounded-lg border border-stone-200 bg-white/75 px-2 py-2 shadow-sm backdrop-blur-sm">
                 <div className="flex items-center gap-3">
                   <div>
-                    <p className="text-[9px] text-gray-400">박스</p>
+                    <p className="text-[9px] text-gray-400">{t('sim_boxes')}</p>
                     <p className="text-xs font-bold text-[#1A1A1A]">{stats.totalBoxes}</p>
                   </div>
                   <div>
@@ -844,19 +952,19 @@ export default function PalletSimulator(props: PalletSimulatorProps = {}) {
                   </div>
                   <div className="flex items-baseline gap-1.5">
                     <div>
-                      <p className="text-[9px] text-gray-400">팔레트</p>
+                      <p className="text-[9px] text-gray-400">{t('sim_pallet')}</p>
                       <p className="text-xs font-bold text-[#C8202A]">{stats.palletsNeeded}</p>
                     </div>
                     <p className="text-[8px] text-gray-400 whitespace-nowrap">{CONTAINER_TYPES[containerType].label}</p>
                   </div>
                   <div>
-                    <p className="text-[9px] text-gray-400">컨테이너</p>
+                    <p className="text-[9px] text-gray-400">{t('sim_container')}</p>
                     <p className="text-xs font-bold text-[#C8202A]">{stats.containersNeeded}</p>
                   </div>
                 </div>
                 <div className="mt-1.5">
                   <div className="mb-0.5 flex justify-between text-[9px] text-gray-400">
-                    <span>적재율</span>
+                    <span>{t('sim_utilization')}</span>
                     <span>{Math.min(100, Math.round((stats.totalCBM / CONTAINER_TYPES[containerType].cbm) * 100))}%</span>
                   </div>
                   <div className="h-1 overflow-hidden rounded-full bg-stone-200">
